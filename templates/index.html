@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor Raspberry Pi Zero</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #1e1e1e;
+            color: #ffffff;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #2d2d2d;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .temp-display {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .temperature {
+            font-size: 4em;
+            font-weight: bold;
+            color: #4CAF50;
+            margin: 10px 0;
+        }
+
+        .temp-hot {
+            color: #f44336;
+        }
+
+        .temp-warm {
+            color: #ff9800;
+        }
+
+        .temp-cool {
+            color: #4CAF50;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .info-card {
+            background-color: #3d3d3d;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .info-card h3 {
+            margin: 0 0 10px 0;
+            color: #4CAF50;
+        }
+
+        .info-value {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        .update-time {
+            text-align: center;
+            margin-top: 20px;
+            color: #888;
+        }
+
+        .refresh-btn {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
+
+        .refresh-btn:hover {
+            background-color: #45a049;
+        }
+        
+        #autoRefreshBtn {
+            transition: background-color 0.3s;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🥧 Monitor Raspberry Pi Zero</h1>
+        <button class="refresh-btn" onclick="updateData()">🔄 Actualizar</button>
+        <button class="refresh-btn" id="autoRefreshBtn" onclick="toggleAutoRefresh()">⏰ Auto-refresh</button>
+    </div>
+
+    <div class="temp-display">
+        <h2>Temperatura de la CPU</h2>
+        {% if temperature %}
+        <div class="temperature
+                    {% if temperature > 70 %}temp-hot
+                    {% elif temperature > 50 %}temp-warm
+                    {% else %}temp-cool{% endif %}">
+            {{ temperature }}°C
+        </div>
+        {% else %}
+        <div class="temperature" style="color: #f44336;">
+            Error al leer temperatura
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="info-grid">
+        <div class="info-card">
+            <h3>CPU</h3>
+            <div class="info-value">{{ system_info.cpu_usage }}</div>
+        </div>
+        <div class="info-card">
+            <h3>Memoria</h3>
+            <div class="info-value">{{ system_info.memory_usage }}</div>
+            <small>{{ system_info.memory_used }} / {{ system_info.memory_total }}</small>
+        </div>
+        <div class="info-card">
+            <h3>Uptime</h3>
+            <div class="info-value" style="font-size: 1em;">{{ system_info.uptime }}</div>
+        </div>
+    </div>
+
+    <div class="update-time">
+        Última actualización: {{ current_time }}
+    </div>
+</div>
+
+<script>
+    let autoRefreshInterval;
+    let autoRefreshEnabled = false;
+
+    function toggleAutoRefresh() {
+        if (autoRefreshEnabled) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshEnabled = false;
+            document.querySelector('.refresh-btn:last-child').textContent = '⏰ Auto-refresh';
+        } else {
+            autoRefreshInterval = setInterval(() => {
+                updateData();
+            }, 3000); // Actualizar cada 3 segundos
+            autoRefreshEnabled = true;
+            document.querySelector('.refresh-btn:last-child').textContent = '⏹️ Detener auto-refresh';
+        }
+    }
+
+    // API para actualizar solo los datos sin recargar la página
+    async function updateData() {
+        try {
+            const response = await fetch('/api/system');
+            const data = await response.json();
+
+            // Actualizar temperatura
+            const tempElement = document.querySelector('.temperature');
+            if (data.temperature) {
+                tempElement.textContent = data.temperature + '°C';
+                // Actualizar color según temperatura
+                tempElement.className = 'temperature ';
+                if (data.temperature > 70) tempElement.className += 'temp-hot';
+                else if (data.temperature > 50) tempElement.className += 'temp-warm';
+                else tempElement.className += 'temp-cool';
+            }
+
+            // Actualizar estadísticas del sistema
+            if (data.system_info) {
+                // Actualizar uso de CPU
+                const cpuElement = document.querySelector('.info-card:nth-child(1) .info-value');
+                if (cpuElement) {
+                    cpuElement.textContent = data.system_info.cpu_usage;
+                }
+                
+                // Actualizar memoria
+                const memoryElement = document.querySelector('.info-card:nth-child(2) .info-value');
+                const memoryDetails = document.querySelector('.info-card:nth-child(2) small');
+                if (memoryElement && memoryDetails) {
+                    memoryElement.textContent = data.system_info.memory_usage;
+                    memoryDetails.textContent = ` ${data.system_info.memory_used} / ${data.system_info.memory_total}`;
+                }
+                
+                // Actualizar uptime
+                const uptimeElement = document.querySelector('.info-card:nth-child(3) .info-value');
+                if (uptimeElement) {
+                    uptimeElement.textContent = data.system_info.uptime;
+                }
+            }
+
+            // Actualizar hora
+            const timeElement = document.querySelector('.update-time');
+            if (timeElement) {
+                timeElement.textContent = 'Última actualización: ' + new Date().toLocaleString();
+            }
+
+        } catch (error) {
+            console.error('Error al actualizar datos:', error);
+        }
+    }
+</script>
+</body>
+</html>
